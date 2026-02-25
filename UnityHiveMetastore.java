@@ -15,19 +15,12 @@ package io.trino.plugin.deltalake.metastore.unity.hive;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import io.trino.metastore.Database;
-import io.trino.metastore.HiveColumnStatistics;
-import io.trino.metastore.HiveMetastore;
-import io.trino.metastore.HivePrincipal;
-import io.trino.metastore.HivePrivilegeInfo;
-import io.trino.metastore.HiveType;
-import io.trino.metastore.Partition;
-import io.trino.metastore.PartitionStatistics;
-import io.trino.metastore.PartitionWithStatistics;
-import io.trino.metastore.PrincipalPrivileges;
-import io.trino.metastore.StatisticsUpdateMode;
-import io.trino.metastore.Table;
-import io.trino.metastore.TableInfo;
+import io.airlift.json.JsonCodec;
+import io.trino.filesystem.Location;
+import io.trino.metastore.*;
+import io.trino.plugin.hive.HiveStorageFormat;
+import io.trino.plugin.hive.metastore.file.Column;
+import io.trino.plugin.hive.metastore.file.TableMetadata;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.function.LanguageFunction;
 import io.trino.spi.predicate.TupleDomain;
@@ -35,11 +28,17 @@ import io.trino.spi.security.RoleGrant;
 
 import java.util.*;
 
+import static io.trino.metastore.StorageFormat.VIEW_STORAGE_FORMAT;
 import static io.trino.metastore.Table.TABLE_COMMENT;
+import static io.trino.plugin.hive.HiveSchemaProperties.LOCATION_PROPERTY;
+import static io.trino.plugin.hive.metastore.file.FileHiveMetastore.SchemaType.TABLE;
+import static java.util.Objects.requireNonNull;
 
 public class UnityHiveMetastore
         implements HiveMetastore
 {
+    private final JsonCodec<TableMetadata> tableCodec = JsonCodec.jsonCodec(TableMetadata.class);
+
     @Override
     public Optional<Database> getDatabase(String databaseName)
     {
@@ -58,7 +57,32 @@ public class UnityHiveMetastore
     @Override
     public Optional<Table> getTable(String databaseName, String tableName)
     {
-        return Optional.empty();
+        requireNonNull(databaseName, "databaseName is null");
+        requireNonNull(tableName, "tableName is null");
+
+        Map <String,String> params = new HashMap<>();
+        Map <String,String> m = new HashMap<>();
+        Column c = new Column("c1", HiveType.HIVE_INT, Optional.of("test column"), m);
+        List<Column>cols = new ArrayList<>();
+        cols.add(c);
+
+        Storage s = Storage
+                .builder()
+                .setLocation("s3://abcd")
+                .build();
+
+        return Optional.of(new Table(
+                databaseName,
+                tableName,
+                Optional.of("Dawidowicz Rafal"),
+                "TABLE",
+                s,
+                Column.toMetastoreModel(cols),
+                Column.toMetastoreModel(cols),
+                params,
+                null,
+                null,
+                OptionalLong.empty()));
     }
 
     @Override

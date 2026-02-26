@@ -13,7 +13,9 @@
  */
 package io.trino.plugin.deltalake.metastore.unity.hive;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import io.airlift.json.JsonCodec;
 import io.trino.metastore.Database;
 import io.trino.metastore.HiveColumnStatistics;
 import io.trino.metastore.HiveMetastore;
@@ -25,38 +27,116 @@ import io.trino.metastore.PartitionStatistics;
 import io.trino.metastore.PartitionWithStatistics;
 import io.trino.metastore.PrincipalPrivileges;
 import io.trino.metastore.StatisticsUpdateMode;
+import io.trino.metastore.Storage;
+import io.trino.metastore.StorageFormat;
 import io.trino.metastore.Table;
 import io.trino.metastore.TableInfo;
+import io.trino.plugin.deltalake.metastore.HiveMetastoreBackedDeltaLakeMetastore;
+import io.trino.plugin.hive.TableType;
+import io.trino.plugin.hive.metastore.file.Column;
+import io.trino.plugin.hive.metastore.file.TableMetadata;
+import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.function.LanguageFunction;
 import io.trino.spi.predicate.TupleDomain;
 import io.trino.spi.security.RoleGrant;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
+import static java.util.Objects.requireNonNull;
+
 public class UnityHiveMetastore
         implements HiveMetastore
 {
+    private final JsonCodec<TableMetadata> tableCodec = JsonCodec.jsonCodec(TableMetadata.class);
+
     @Override
     public Optional<Database> getDatabase(String databaseName)
     {
         return Optional.empty();
     }
 
+    private final UnityCatalogClient client;
+    private final String catalog;
+
+    public UnityHiveMetastore(UnityHiveMetastoreConfig config)
+    {
+        this.client = new UnityCatalogClient(config.getMetastoreUrl(), config.getMetastoreToken());
+        this.catalog = config.getCatalog();
+    }
+
     @Override
     public List<String> getAllDatabases()
     {
-        return List.of();
+        return client.listSchemas(catalog);
     }
 
     @Override
     public Optional<Table> getTable(String databaseName, String tableName)
     {
-        return Optional.empty();
+        requireNonNull(databaseName, "databaseName is null");
+        requireNonNull(tableName, "tableName is null");
+
+        io.trino.plugin.deltalake.metastore.unity.hive.TableInfo table
+                = client.getTable(catalog, databaseName, tableName);
+
+        Table t = convertMetastoreTable(table);
+
+        return Optional.of(t);
+    }
+
+    private Table convertMetastoreTable(io.trino.plugin.deltalake.metastore.unity.hive.TableInfo table)
+    {
+        Map<String, String> serde = new HashMap<>();
+        serde.put("path", table.getStorageLocation());
+
+        Storage storage = Storage
+                .builder()
+                .setLocation(table.getStorageLocation())
+                .setStorageFormat(StorageFormat.NULL_STORAGE_FORMAT)
+                .setSerdeParameters(serde)
+                .build();
+
+        Map<String, String> params = new HashMap<>();
+        params.put(HiveMetastoreBackedDeltaLakeMetastore.TABLE_PROVIDER_PROPERTY, "DELTA");
+
+        List<Column> columns = convertMetastoreColumns(table.getColumns());
+
+        Table result = new Table(
+                table.getSchemaName(),
+                table.getName(),
+                Optional.of(table.getOwner()),
+                TableType.EXTERNAL_TABLE.name(),
+                storage,
+                Column.toMetastoreModel(columns),
+                Column.toMetastoreModel(columns),
+                params,
+                Optional.empty(),
+                Optional.empty(),
+                OptionalLong.empty());
+        return result;
+    }
+
+    private List<Column> convertMetastoreColumns(List<ColumnInfo> columns)
+    {
+        List<Column> result = new ArrayList<>();
+
+        for (ColumnInfo ci : columns) {
+            Map<String, String> m = new HashMap<>();
+            Column c = new Column(ci.getName(),
+                    HiveType.valueOf(ci.getTypeName()),
+                    Optional.of(ci.getComment()),
+                    m);
+            result.add(c);
+        }
+        return result;
     }
 
     @Override
@@ -84,7 +164,17 @@ public class UnityHiveMetastore
     @Override
     public List<TableInfo> getTables(String databaseName)
     {
-        return List.of();
+        Set<TableInfo> tables = new HashSet<>();
+
+        List<String> ucResult = client.listTables(catalog, databaseName);
+        for (String tab : ucResult) {
+            TableInfo ti = new TableInfo(new SchemaTableName(databaseName, tab),
+                    TableInfo.ExtendedRelationType.fromTableTypeAndComment(
+                            TableInfo.ExtendedRelationType.TABLE.name(), tab));
+            tables.add(ti);
+        }
+
+        return ImmutableList.copyOf(tables);
     }
 
     @Override

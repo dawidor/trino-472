@@ -37,7 +37,7 @@ public class UnityHiveMetastoreFactory
             UnityHiveMetastoreConfig config,
             Tracer tracer)
     {
-        metastore = new UnityHiveMetastore();
+        metastore = new UnityHiveMetastore(config);
     }
 
     @Override

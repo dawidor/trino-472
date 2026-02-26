@@ -33,8 +33,11 @@ public class UnityHiveMetastoreConfig
 
     private String catalogDirectory;
     private UnityHiveMetastoreConfig.VersionCompatibility versionCompatibility = NOT_SUPPORTED;
-    private boolean disableLocationChecks; // TODO this should probably be true by default, to align with well-behaving metastores other than HMS
+    private boolean disableLocationChecks;
     private String metastoreUser = "presto";
+    private String metastoreUrl;
+    private String metastoreToken;
+    private String catalog;
 
     @NotNull
     public String getCatalogDirectory()
@@ -86,6 +89,47 @@ public class UnityHiveMetastoreConfig
     public UnityHiveMetastoreConfig setMetastoreUser(String metastoreUser)
     {
         this.metastoreUser = metastoreUser;
+        return this;
+    }
+
+    @NotNull
+    public String getMetastoreUrl()
+    {
+        return metastoreUrl;
+    }
+
+    @Config("hive.metastore.unity-catalog.url")
+    @ConfigDescription("Unity catalog metastore url")
+    public UnityHiveMetastoreConfig setMetastoreUrl(String metastoreUrl)
+    {
+        this.metastoreUrl = metastoreUrl;
+        return this;
+    }
+
+    public String getMetastoreToken()
+    {
+        return metastoreToken;
+    }
+
+    @Config("hive.metastore.unity-catalog.token")
+    @ConfigDescription("Unity catalog metastore token")
+    public UnityHiveMetastoreConfig setMetastoreToken(String metastoreToken)
+    {
+        this.metastoreToken = metastoreToken;
+        return this;
+    }
+
+    @NotNull
+    public String getCatalog()
+    {
+        return catalog;
+    }
+
+    @Config("hive.metastore.unity-catalog.catalog-name")
+    @ConfigDescription("Unity catalog metastore catalog name")
+    public UnityHiveMetastoreConfig setCatalog(String catalog)
+    {
+        this.catalog = catalog;
         return this;
     }
 }
